@@ -1,5 +1,9 @@
 from sqlmodel import create_engine, SQLModel, Session
+from sqlalchemy import text
 from backend.app.config import settings
+from datetime import datetime
+from typing import Optional
+import time
 
 # Import all models so SQLModel.metadata knows about them
 import backend.app.models.models as _models  # noqa: F401
@@ -12,6 +16,23 @@ engine = create_engine(
     future=True,
     pool_pre_ping=True,  # Verify connections before using
 )
+
+
+# Cached max timestamp (avoids repeated subqueries)
+_max_ts_cache: Optional[datetime] = None
+_max_ts_cached_at: float = 0
+_MAX_TS_TTL: int = 300  # refresh every 5 minutes
+
+
+def get_max_event_timestamp(session: Session) -> datetime:
+    """Get the latest event timestamp, cached in memory."""
+    global _max_ts_cache, _max_ts_cached_at
+    now = time.monotonic()
+    if _max_ts_cache is None or (now - _max_ts_cached_at) > _MAX_TS_TTL:
+        result = session.exec(text("SELECT MAX(event_timestamp) FROM events"))
+        _max_ts_cache = result.one()[0]
+        _max_ts_cached_at = now
+    return _max_ts_cache
 
 
 def create_db_and_tables():

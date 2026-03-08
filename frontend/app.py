@@ -1,26 +1,25 @@
-from fastapi import FastAPI
 import streamlit as st
+import importlib
 
-# Initialize the FastAPI application
-app = FastAPI()
+st.set_page_config(
+    page_title="Claude Code Analytics",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# Streamlit application layout
-def main():
-    st.title("Claude Code Usage Analytics")
-    st.sidebar.title("Navigation")
-    
-    # Sidebar navigation
-    page = st.sidebar.selectbox("Select a page", ["Dashboard", "Events", "Analytics"])
-    
-    if page == "Dashboard":
-        st.write("Welcome to the Dashboard!")
-        # Add dashboard components here
-    elif page == "Events":
-        st.write("Explore Telemetry Events")
-        # Add events display components here
-    elif page == "Analytics":
-        st.write("Analytics Insights")
-        # Add analytics components here
+API_BASE = "http://localhost:8000/api"
 
-if __name__ == "__main__":
-    main()
+PAGES = {
+    "🏠 Overview": "views.overview",
+    "📈 Usage & Tokens": "views.usage_tokens",
+    "🔧 Tools": "views.tools",
+    "⚠️ Errors": "views.errors",
+    "👥 Users": "views.users",
+}
+
+st.sidebar.title("Claude Code Analytics")
+selection = st.sidebar.radio("Navigate", list(PAGES.keys()))
+
+module = importlib.import_module(PAGES[selection])
+module.render()

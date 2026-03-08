@@ -1,8 +1,9 @@
 from sqlalchemy import text
 from sqlmodel import Session
+from datetime import datetime
 
 
-def get_user_ranking(session: Session, days: int = 30, limit: int = 20):
+def get_user_ranking(session: Session, days: int = 60, limit: int = 20, max_ts: datetime = None):
     """Most active users."""
     result = session.exec(text("""
         SELECT
@@ -14,11 +15,11 @@ def get_user_ranking(session: Session, days: int = 30, limit: int = 20):
             COUNT(DISTINCT e.session_id) as total_sessions
         FROM events e
         LEFT JOIN employees emp ON e.user_email = emp.email
-        WHERE e.event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE e.event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
         GROUP BY e.user_email, emp.full_name, emp.practice, emp.level
         ORDER BY total_events DESC
         LIMIT :limit
-    """), params={"days": days, "limit": limit})
+    """), params={"days": days, "limit": limit, "max_ts": max_ts})
     return [{
         "user_email": r[0],
         "full_name": r[1],
@@ -29,7 +30,34 @@ def get_user_ranking(session: Session, days: int = 30, limit: int = 20):
     } for r in result]
 
 
-def get_prompt_stats(session: Session, days: int = 30):
+def get_least_active_users(session: Session, days: int = 60, limit: int = 20, max_ts: datetime = None):
+    """Least active users."""
+    result = session.exec(text("""
+        SELECT
+            e.user_email,
+            emp.full_name,
+            emp.practice,
+            emp.level,
+            COUNT(*) as total_events,
+            COUNT(DISTINCT e.session_id) as total_sessions
+        FROM events e
+        LEFT JOIN employees emp ON e.user_email = emp.email
+        WHERE e.event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
+        GROUP BY e.user_email, emp.full_name, emp.practice, emp.level
+        ORDER BY total_events ASC, total_sessions ASC, e.user_email ASC
+        LIMIT :limit
+    """), params={"days": days, "limit": limit, "max_ts": max_ts})
+    return [{
+        "user_email": r[0],
+        "full_name": r[1],
+        "practice": r[2],
+        "level": r[3],
+        "total_events": r[4],
+        "total_sessions": r[5],
+    } for r in result]
+
+
+def get_prompt_stats(session: Session, days: int = 60, max_ts: datetime = None):
     """Prompt length statistics."""
     result = session.exec(text("""
         SELECT
@@ -40,8 +68,8 @@ def get_prompt_stats(session: Session, days: int = 30):
             COUNT(*) as total_prompts
         FROM events e
         JOIN user_prompts up ON e.event_id = up.event_id
-        WHERE e.event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
-    """), params={"days": days})
+        WHERE e.event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
+    """), params={"days": days, "max_ts": max_ts})
     row = result.one()
     return {
         "avg_length": float(row[0]) if row[0] else 0,
@@ -52,7 +80,7 @@ def get_prompt_stats(session: Session, days: int = 30):
     }
 
 
-def get_prompts_by_practice(session: Session, days: int = 30):
+def get_prompts_by_practice(session: Session, days: int = 60, max_ts: datetime = None):
     """Prompt length by practice."""
     result = session.exec(text("""
         SELECT
@@ -61,15 +89,15 @@ def get_prompts_by_practice(session: Session, days: int = 30):
             COUNT(*) as total_prompts
         FROM events e
         JOIN user_prompts up ON e.event_id = up.event_id
-        WHERE e.event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE e.event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
           AND e.user_practice IS NOT NULL
         GROUP BY e.user_practice
         ORDER BY avg_length DESC
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{"practice": r[0], "avg_length": float(r[1]), "total_prompts": r[2]} for r in result]
 
 
-def get_prompts_by_level(session: Session, days: int = 30):
+def get_prompts_by_level(session: Session, days: int = 60, max_ts: datetime = None):
     """Prompt length by employee level."""
     result = session.exec(text("""
         SELECT
@@ -79,14 +107,14 @@ def get_prompts_by_level(session: Session, days: int = 30):
         FROM events e
         JOIN user_prompts up ON e.event_id = up.event_id
         JOIN employees emp ON e.user_email = emp.email
-        WHERE e.event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE e.event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
         GROUP BY emp.level
         ORDER BY emp.level
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{"level": r[0], "avg_length": float(r[1]), "total_prompts": r[2]} for r in result]
 
 
-def get_user_cost_breakdown(session: Session, days: int = 30, limit: int = 50):
+def get_user_cost_breakdown(session: Session, days: int = 60, limit: int = 50, max_ts: datetime = None):
     """Per-user cost breakdown."""
     result = session.exec(text("""
         SELECT
@@ -101,11 +129,11 @@ def get_user_cost_breakdown(session: Session, days: int = 30, limit: int = 50):
         FROM events e
         JOIN api_requests a ON e.event_id = a.event_id
         LEFT JOIN employees emp ON e.user_email = emp.email
-        WHERE e.event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE e.event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
         GROUP BY e.user_email, emp.full_name, emp.practice, emp.level
         ORDER BY total_cost DESC
         LIMIT :limit
-    """), params={"days": days, "limit": limit})
+    """), params={"days": days, "limit": limit, "max_ts": max_ts})
     return [{
         "user_email": r[0],
         "full_name": r[1],

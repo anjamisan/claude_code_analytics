@@ -1,21 +1,22 @@
 from sqlalchemy import text
 from sqlmodel import Session
+from datetime import datetime
 
 
-def get_peak_hours(session: Session, days: int = 30):
+def get_peak_hours(session: Session, days: int = 60, max_ts: datetime = None):
     """Events by hour of day."""
     result = session.exec(text("""
         SELECT
             EXTRACT(HOUR FROM event_timestamp)::int as hour,
             COUNT(*) as event_count
         FROM events
-        WHERE event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
         GROUP BY hour ORDER BY hour
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{"hour": r[0], "event_count": r[1]} for r in result]
 
 
-def get_usage_heatmap(session: Session, days: int = 30):
+def get_usage_heatmap(session: Session, days: int = 60, max_ts: datetime = None):
     """Events by hour × day-of-week."""
     result = session.exec(text("""
         SELECT
@@ -23,40 +24,40 @@ def get_usage_heatmap(session: Session, days: int = 30):
             EXTRACT(HOUR FROM event_timestamp)::int as hour,
             COUNT(*) as event_count
         FROM events
-        WHERE event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
         GROUP BY day_of_week, hour
         ORDER BY day_of_week, hour
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{"day_of_week": r[0], "hour": r[1], "event_count": r[2]} for r in result]
 
 
-def get_model_popularity(session: Session, days: int = 30):
+def get_model_popularity(session: Session, days: int = 60, max_ts: datetime = None):
     """Model usage distribution."""
     result = session.exec(text("""
         SELECT a.model, COUNT(*) as usage_count, SUM(a.cost_usd) as total_cost
         FROM events e
         JOIN api_requests a ON e.event_id = a.event_id
-        WHERE e.event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE e.event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
         GROUP BY a.model
         ORDER BY usage_count DESC
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{"model": r[0], "usage_count": r[1], "total_cost": float(r[2])} for r in result]
 
 
-def get_terminal_distribution(session: Session, days: int = 30):
+def get_terminal_distribution(session: Session, days: int = 60, max_ts: datetime = None):
     """Terminal type distribution."""
     result = session.exec(text("""
         SELECT terminal_type, COUNT(*) as event_count
         FROM events
-        WHERE event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
           AND terminal_type IS NOT NULL
         GROUP BY terminal_type
         ORDER BY event_count DESC
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{"terminal_type": r[0], "event_count": r[1]} for r in result]
 
 
-def get_events_per_session(session: Session, days: int = 30):
+def get_events_per_session(session: Session, days: int = 60, max_ts: datetime = None):
     """Distribution of events per session."""
     result = session.exec(text("""
         SELECT
@@ -66,12 +67,12 @@ def get_events_per_session(session: Session, days: int = 30):
             MAX(event_timestamp) as end_time,
             EXTRACT(EPOCH FROM MAX(event_timestamp) - MIN(event_timestamp)) as duration_seconds
         FROM events
-        WHERE event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
           AND session_id IS NOT NULL
         GROUP BY session_id
         ORDER BY event_count DESC
         LIMIT 100
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{
         "session_id": str(r[0]),
         "event_count": r[1],
@@ -81,14 +82,14 @@ def get_events_per_session(session: Session, days: int = 30):
     } for r in result]
 
 
-def get_os_distribution(session: Session, days: int = 30):
+def get_os_distribution(session: Session, days: int = 60, max_ts: datetime = None):
     """OS and architecture distribution."""
     result = session.exec(text("""
         SELECT os_type, host_arch, COUNT(*) as event_count
         FROM events
-        WHERE event_timestamp >= NOW() - MAKE_INTERVAL(days => :days)
+        WHERE event_timestamp >= :max_ts - MAKE_INTERVAL(days => :days)
           AND os_type IS NOT NULL
         GROUP BY os_type, host_arch
         ORDER BY event_count DESC
-    """), params={"days": days})
+    """), params={"days": days, "max_ts": max_ts})
     return [{"os_type": r[0], "host_arch": r[1], "event_count": r[2]} for r in result]

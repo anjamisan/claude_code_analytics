@@ -3,14 +3,25 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://user:password@db:5432/telemetry
     depends_on:
       - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE=http://backend:8000/api
+    depends_on:
+      - backend
 
   db:
     image: postgres:13
