@@ -91,6 +91,7 @@ ehthumbs.db
 # data/
 # *.csv
 # *.json
+data/telemetry_logs.jsonl
 
 # Temporary files
 tmp/
