@@ -13,6 +13,7 @@ API_BASE = "http://localhost:8000/api"
 PAGES = {
     "🏠 Overview": "views.overview",
     "📈 Usage & Tokens": "views.usage_tokens",
+    "🔮 Predictions": "views.predictions",
     "🔧 Tools": "views.tools",
     "⚠️ Errors": "views.errors",
     "👥 Users": "views.users",

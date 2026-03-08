@@ -7,7 +7,7 @@ from api import fetch, fetch_df
 def render():
     st.title("Overview")
 
-    days = st.sidebar.slider("Time window (days)", 1, 365, 60, key="overview_days")
+    days = st.sidebar.slider("Time window (days)", 1, 60, 60, key="overview_days")
 
     # ── KPI Cards ──────────────────────────────────────────────
     stats = fetch("/overview/summary", {"days": days})

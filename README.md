@@ -6,6 +6,7 @@ It supports:
 - Loading historical telemetry into PostgreSQL
 - Querying aggregated analytics via REST endpoints
 - Visualizing usage, cost, tools, errors, and user behavior in Streamlit
+- Baseline predictive analytics (forecasting + holdout backtesting)
 
 ## Project Structure
 
@@ -15,6 +16,7 @@ claude-code-analytics/
 │   ├── app/
 │   │   ├── api/                  # FastAPI route modules
 │   │   ├── queries/              # SQL query functions used by API routes
+│   │   ├── services/             # Forecasting and shared analytics services
 │   │   ├── models/               # SQLModel table + response models
 │   │   ├── database.py           # Engine/session + max timestamp cache
 │   │   └── main.py               # FastAPI app entrypoint
@@ -24,6 +26,7 @@ claude-code-analytics/
 │   ├── app.py                    # Streamlit app entrypoint
 │   ├── api.py                    # HTTP client helpers to call FastAPI
 │   ├── views/                    # Streamlit pages/views
+│   │   └── predictions.py        # Forecast + backtest visualization page
 │   ├── Dockerfile                # Frontend container image definition
 │   └── requirements.txt
 ├── data/
@@ -40,8 +43,9 @@ claude-code-analytics/
 
 ### 1) Backend (FastAPI)
 - API routers are grouped by domain under `backend/app/api`:
-  - `overview`, `usage`, `tokens`, `tools`, `errors`, `users`
+  - `overview`, `usage`, `tokens`, `tools`, `errors`, `users`, `predictions`
 - Each endpoint delegates SQL work to functions in `backend/app/queries`.
+- Prediction endpoints use a shared baseline forecasting utility in `backend/app/services/forecast.py`.
 - DB access is managed in `backend/app/database.py` using SQLModel/SQLAlchemy sessions.
 - For time-window queries, the backend uses `MAX(event_timestamp)` (cached) as a stable reference for historical datasets.
 
@@ -56,6 +60,32 @@ claude-code-analytics/
 - `frontend/app.py` provides page navigation.
 - Each page in `frontend/views` requests data from FastAPI and renders Plotly charts.
 - `frontend/api.py` is the shared HTTP layer to call backend endpoints (`API_BASE` is environment-configurable for Docker networking).
+- `frontend/views/predictions.py` visualizes historical series, holdout backtests, and future forecasts.
+
+## Predictive Analytics (Bonus)
+
+The project includes a baseline forecasting module for key overview/token metrics.
+
+### Prediction endpoints
+
+- `GET /api/predictions/total-cost?days=90&horizon=14`
+- `GET /api/predictions/token-trends?days=90&horizon=14`
+- `GET /api/predictions/input-output-ratio?days=90&horizon=14`
+
+### What each response includes
+
+- `historical`: dense daily training series used by the model
+- `backtest`: holdout-window comparison (`actual` vs `predicted`)
+- `forecast`: future horizon predictions with lower/upper interval bounds
+- `evaluation`: model quality metrics (`mae`, `mape`, `holdout_days`)
+
+### Model and evaluation approach
+
+- Model type: linear trend baseline (`linear_trend_baseline`)
+- Holdout size is dynamic:
+  - `holdout_days = min(14, max(3, len(series)//5))`
+- `MAPE` excludes points where actual value is zero.
+- This is intended as a transparent baseline for static historical telemetry, not a production-grade forecasting system.
 
 ### 4) Data Flow
 1. Generate or provide telemetry files in `data/`.
@@ -87,10 +117,11 @@ Note: `docker-compose.yml` contains intentionally hardcoded mock database creden
   docker compose up --build -d
   ```
 
-3. Wait for first-run initialization to complete (one-time):
-  - `data-loader` service automatically generates deterministic demo data and loads it into PostgreSQL.
-  - This happens only when the Docker data volume is empty.
-  - On first run, this step can take a few minutes.
+3. Because large telemetry files are not committed to GitHub, generate and load demo data inside the backend container:
+  ```bash
+  docker compose exec backend python scripts/generate_fake_data.py --num-users 100 --num-sessions 5000 --days 60 --output-dir /app/data
+  docker compose exec backend python scripts/load_data.py
+  ```
 
 4. Verify backend is up:
   ```bash
@@ -108,13 +139,6 @@ Note: `docker-compose.yml` contains intentionally hardcoded mock database creden
   pip install -r backend/requirements.txt
   pip install -r frontend/requirements.txt
   ```
-
-To force a full re-initialization (drop DB + regenerated data), run:
-
-```bash
-docker compose down -v
-docker compose up --build -d
-```
 
 ### Option B: Run everything locally (no Docker)
 
@@ -168,7 +192,7 @@ Use scripts in `/scripts` to generate and load data:
 Notes:
 - Loader expects files under `data/` (notably `telemetry_logs.jsonl` and `employees.csv`).
 - The generator writes compatible files for the loader workflow.
-- Docker flow runs generation/loading automatically on first run via the `data-loader` service.
+- For Docker flow, generate to `/app/data` inside the backend container and then run the loader in that same container.
 
 ### Start Frontend
 
@@ -189,14 +213,11 @@ The telemetry data consists of four event types, each representing a different s
 
 | Event | Description | Key Attributes |
 |-------|-------------|----------------|
-| `user_prompt` | Logged when a user sends a message to Claude Code | `prompt_length` |
+| `user_prompt` | Logged when a user sends a message to Claude Code, this triggers an api_request | `prompt_length` |
 | `api_request` | An API call to Anthropic's model for inference | `model`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `cost_usd`, `duration_ms` |
 | `tool_decision` | Claude deciding whether to use a tool (accept/reject) | `tool_name`, `decision`, `source` |
 | `tool_result` | The outcome of executing a tool on the user's machine | `tool_name`, `success`, `duration_ms` |
 
-### Why only `api_request` has a cost
-
-Only `api_request` events carry a `cost_usd` field because they are the only events that call Anthropic's API — which is where billing occurs (token-based pricing for model inference). The other events are all local operations: the user typing a prompt, Claude making a tool-use decision, or a tool running on the user's machine. None of these involve a paid API call.
 
 ### Typical event flow
 
@@ -244,7 +265,3 @@ This project uses two dependency sets.
 - requests==2.32.3
 - sqlalchemy==2.0.36
 - psycopg2-binary==2.9.10
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for more details.
