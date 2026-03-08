@@ -31,18 +31,6 @@ def render():
             df_cost["date"] = pd.to_datetime(df_cost["date"], errors="coerce")
             df_cost["total_cost"] = pd.to_numeric(df_cost["total_cost"], errors="coerce")
             df_cost = df_cost.dropna(subset=["date", "total_cost"]).sort_values("date")
-
-            st.caption(
-                f"Points: {len(df_cost)} | Min: ${df_cost['total_cost'].min():,.2f} | Max: ${df_cost['total_cost'].max():,.2f}"
-            )
-
-            with st.expander("Debug: sample cost rows"):
-                st.dataframe(
-                    pd.concat([df_cost.head(3), df_cost.tail(3)]),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
             fig = px.line(
                 df_cost,
                 x="date",

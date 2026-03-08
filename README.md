@@ -18,11 +18,13 @@ claude-code-analytics/
 │   │   ├── models/               # SQLModel table + response models
 │   │   ├── database.py           # Engine/session + max timestamp cache
 │   │   └── main.py               # FastAPI app entrypoint
+│   ├── Dockerfile                # Backend container image definition
 │   └── requirements.txt
 ├── frontend/
 │   ├── app.py                    # Streamlit app entrypoint
 │   ├── api.py                    # HTTP client helpers to call FastAPI
 │   ├── views/                    # Streamlit pages/views
+│   ├── Dockerfile                # Frontend container image definition
 │   └── requirements.txt
 ├── data/
 │   ├── employees.csv             # Employee metadata seed
@@ -30,7 +32,7 @@ claude-code-analytics/
 ├── scripts/
 │   ├── generate_fake_data.py     # Generates synthetic telemetry + employee data
 │   └── load_data.py              # Loads data files into PostgreSQL tables
-├── docker-compose.yml            # PostgreSQL + backend container setup
+├── docker-compose.yml            # PostgreSQL + backend + frontend container setup
 └── README.md
 ```
 
@@ -53,7 +55,7 @@ claude-code-analytics/
 ### 3) Frontend (Streamlit + Plotly)
 - `frontend/app.py` provides page navigation.
 - Each page in `frontend/views` requests data from FastAPI and renders Plotly charts.
-- `frontend/api.py` is the shared HTTP layer to call backend endpoints.
+- `frontend/api.py` is the shared HTTP layer to call backend endpoints (`API_BASE` is environment-configurable for Docker networking).
 
 ### 4) Data Flow
 1. Generate or provide telemetry files in `data/`.
@@ -72,6 +74,8 @@ These instructions are written for Linux.
 
 ### Option A: Run PostgreSQL and backend with Docker Compose
 
+Note: `docker-compose.yml` contains intentionally hardcoded mock database credentials for this examination assignment and local demo convenience. These are not production secrets. 
+
 1. Clone and enter the repository:
   ```bash
   git clone <repository-url>
@@ -83,18 +87,34 @@ These instructions are written for Linux.
   docker compose up --build -d
   ```
 
-3. Verify backend is up:
+3. Wait for first-run initialization to complete (one-time):
+  - `data-loader` service automatically generates deterministic demo data and loads it into PostgreSQL.
+  - This happens only when the Docker data volume is empty.
+  - On first run, this step can take a few minutes.
+
+4. Verify backend is up:
   ```bash
   curl http://localhost:8000/
   ```
 
-4. Set up Python virtual environment for scripts + frontend:
+5. Open applications:
+  - Frontend: `http://localhost:8501`
+  - Backend OpenAPI docs: `http://localhost:8000/docs`
+
+6. (Optional) Set up Python virtual environment for local scripts/tooling:
   ```bash
   python3 -m venv venv
   source venv/bin/activate
   pip install -r backend/requirements.txt
   pip install -r frontend/requirements.txt
   ```
+
+To force a full re-initialization (drop DB + regenerated data), run:
+
+```bash
+docker compose down -v
+docker compose up --build -d
+```
 
 ### Option B: Run everything locally (no Docker)
 
@@ -129,7 +149,7 @@ These instructions are written for Linux.
 
 ### Data Generation and Loading
 
-`telemetry_data.json` is not uploaded to GitHub due to repository size limits.
+`telemetry_data.json` / large raw telemetry files are not uploaded to GitHub due to repository size limits.
 
 Use scripts in `/scripts` to generate and load data:
 
@@ -148,6 +168,7 @@ Use scripts in `/scripts` to generate and load data:
 Notes:
 - Loader expects files under `data/` (notably `telemetry_logs.jsonl` and `employees.csv`).
 - The generator writes compatible files for the loader workflow.
+- Docker flow runs generation/loading automatically on first run via the `data-loader` service.
 
 ### Start Frontend
 
