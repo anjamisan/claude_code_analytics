@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+altair
+requests
+sqlalchemy
+psycopg2-binary
